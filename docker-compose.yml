@@ -1,0 +1,63 @@
+services:
+
+  db:
+    build: ./db
+    container_name: db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PWD}
+      POSTGRES_DB: ${DB_NAME}
+      TZ: Asia/Seoul
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - ./db/data_directory:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    networks:
+      - tmx-net
+
+  back:
+    build: ./back
+    container_name: back
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PWD: ${DB_PWD}
+      APP_PORT: ${BACK_PORT}
+    ports:
+      - "${BACK_PORT}:8000"
+    volumes:
+      - ./back:/app          # hot reload용 소스 마운트
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - tmx-net
+
+  front:
+    build:
+      context: ./front
+      target: dev            # dev 스테이지 사용
+    container_name: front
+    environment:
+      VITE_API_URL: ${VITE_API_URL}
+    ports:
+      - "${FRONT_PORT}:3000"
+    volumes:
+      - ./front:/app         # hot reload용 소스 마운트
+      - /app/node_modules    # 컨테이너 node_modules 보호
+    depends_on:
+      - back
+    networks:
+      - tmx-net
+
+networks:
+  tmx-net:
+    driver: bridge
